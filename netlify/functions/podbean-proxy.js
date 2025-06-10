@@ -8,10 +8,7 @@ const getAccessToken = async () => {
     const clientSecret = process.env.PODBEAN_CLIENT_SECRET;
 
     if (!clientId || !clientSecret) {
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ error: 'API credentials are not configured in environment variables.' })
-        };
+        throw new Error('API credentials are not configured in environment variables.');
     }
 
     const authUrl = 'https://api.podbean.com/v1/oauth/token';
@@ -32,18 +29,35 @@ const getAccessToken = async () => {
         return data.access_token;
     } catch (error) {
         console.error('Error fetching access token:', error);
-        throw error; // Rethrow to be caught by the handler
+        throw error;
     }
 };
 
-
 // Main serverless function handler
 exports.handler = async (event) => {
+    // --- CORS Headers ---
+    // This headers object will be added to every response.
+    const corsHeaders = {
+        'Access-Control-Allow-Origin': '*', // Allows any origin
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+    };
+
+    // Handle preflight requests for CORS
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 204,
+            headers: corsHeaders,
+            body: ''
+        };
+    }
+
     const { endpoint } = event.queryStringParameters;
 
     if (!endpoint) {
         return {
             statusCode: 400,
+            headers: corsHeaders,
             body: JSON.stringify({ error: 'The "endpoint" query parameter is required.' }),
         };
     }
@@ -58,25 +72,22 @@ exports.handler = async (event) => {
             }
         });
 
-        if (!response.ok) {
-             const errorData = await response.json();
-             return {
-                statusCode: response.status,
-                body: JSON.stringify(errorData),
-            };
-        }
-
         const data = await response.json();
 
+        // Combine the API data response with the CORS headers
         return {
-            statusCode: 200,
-            headers: { 'Content-Type': 'application/json' },
+            statusCode: response.status,
+            headers: {
+                ...corsHeaders,
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify(data),
         };
 
     } catch (error) {
         return {
             statusCode: 500,
+            headers: corsHeaders,
             body: JSON.stringify({ error: error.message }),
         };
     }
